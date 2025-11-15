@@ -3,7 +3,7 @@ import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter,
   Button, Text, Input, VStack, Alert, AlertIcon
 } from '@chakra-ui/react';
-import { WARN_SECONDS } from '../lib/config';
+import { SESSION_WARN_SECONDS } from '../constants';
 
 type Props = {
   remainingSec: number;
@@ -73,7 +73,7 @@ export function SessionExpiryModal({
               </Alert>
             )}
             <Text fontSize="xs" color="gray.500">
-              Soglia di avviso: {WARN_SECONDS / 60} minuti prima della scadenza.
+              Soglia di avviso: {SESSION_WARN_SECONDS / 60} minuti prima della scadenza.
             </Text>
           </VStack>
         </ModalBody>

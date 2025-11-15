@@ -1,5 +1,6 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
 import fetch from 'cross-fetch';
-import { windHeaders } from '../../../constants/windHeaders';
+import { windHeaders, API_BASE } from '../../../constants';
 import {
   getOrSetDeviceId,
   getCookie,
@@ -9,24 +10,23 @@ import {
   getChallengeToken,
 } from '../../../lib/serverCookies';
 
-export default async function handler(req, res) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { email, customerLine } = req.body || {};
+  const { email, customerLine } = (req.body || {}) as { email?: string; customerLine?: string };
   if (!email) return res.status(400).json({ error: 'Missing email' });
 
+  const challenge = getChallengeToken(req);
+  if (!challenge) return res.status(412).json({ error: 'Missing challenge token. Call /credentials first.' });
+
   try {
-    const apiBase = process.env.API_BASE || 'https://apigw.verymobile.it/api';
     const deviceId = getOrSetDeviceId(req, res);
     const prevGw = getCookie(req, 'gw_cookie');
     const cookie = prevGw ? decodeURIComponent(prevGw) : undefined;
-    const challenge = getChallengeToken(req);
-    if (!challenge) return res.status(412).json({ error: 'Missing challenge token. Call /credentials first.' });
 
     const headers = windHeaders({ uuid: deviceId, cookie, challengeToken: challenge });
-
     const body = customerLine ? { email, customerLine } : { email };
 
-    const r = await fetch(`${apiBase}/v1/strong-auth/otp/generate`, {
+    const r = await fetch(`${API_BASE}/v1/strong-auth/otp/generate`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -42,7 +42,7 @@ export default async function handler(req, res) {
     }
 
     return res.status(r.status).json(out.json ?? { raw: out.text });
-  } catch (e) {
+  } catch (e: any) {
     return res.status(500).json({ error: e.message || String(e) });
   }
 }
