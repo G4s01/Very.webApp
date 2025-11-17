@@ -15,6 +15,8 @@ export interface ParsedLineInfo {
   trayItems: TrayItem[];
   segments: Segment[]; // per DonutGauge
   creditTotal?: number;
+  creditRegular?: number; // credito non-omaggio (prepaid/standard)
+  creditPromo?: number;   // credito omaggio / bonus
 }
 
 export interface ExtraGiga {
@@ -224,11 +226,36 @@ export function parseLineUnfolded(raw: any): ParsedLineInfo | null {
   const order: Record<TrayItem['type'], number> = { '5G': 1, 'EXTRA_GIGA': 2, 'AUTORICARICA': 3, 'OTHER': 10 };
   const trayItems = Array.from(trayMap.values()).sort((a, b) => (order[a.type] - order[b.type]) || a.label.localeCompare(b.label));
 
+  // --- CREDIT extraction: explicit fields and robust fallbacks ---
+  const rawCredit = safeNumber(line.credit);               // e.g. 192.7261
+  const prepaidField = safeNumber(line.creditPrepaid);     // e.g. 6.9261
+  const bonusField = safeNumber(line.creditBonus) ?? safeNumber(line.creditPromo) ?? 0; // e.g. 185.8
+
+  // creditPromo is the explicit bonus/omaggio if present
+  const creditPromo = bonusField || 0;
+
+  // creditRegular prefer explicit prepaid; otherwise derive from total - promo when possible
+  let creditRegular: number;
+  if (typeof prepaidField === 'number') {
+    creditRegular = prepaidField;
+  } else if (typeof rawCredit === 'number') {
+    creditRegular = Math.max(0, rawCredit - creditPromo);
+  } else {
+    // fallback: try to infer from active entities (legacy heuristics could be added)
+    creditRegular = 0;
+  }
+
+  // creditTotal prefer rawCredit, otherwise sum parts
+  const detectedCreditTotal = (typeof rawCredit === 'number') ? rawCredit : Math.max(0, creditRegular + creditPromo);
+
   console.debug('[lineInfo] parse result', {
     msisdn, offerName, offerRenewalDate,
     overallTotal, overallAvail, extraGigaAddOnsCount: extraGigaAddOns.length,
     segmentsCount: segments.length, trayItemsCount: trayItems.length,
-    trayItems, segments
+    trayItems, segments,
+    creditTotal: detectedCreditTotal,
+    creditRegular,
+    creditPromo
   });
 
   return {
@@ -242,7 +269,9 @@ export function parseLineUnfolded(raw: any): ParsedLineInfo | null {
     hasAutoTopup,
     trayItems,
     segments,
-    creditTotal: safeNumber(line.creditPrepaid) ?? safeNumber(line.credit)
+    creditTotal: safeNumber(detectedCreditTotal) ?? undefined,
+    creditRegular: safeNumber(creditRegular) ?? undefined,
+    creditPromo: safeNumber(creditPromo) ?? undefined
   };
 }
 
