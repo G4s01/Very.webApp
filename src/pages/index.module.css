@@ -1,0 +1,79 @@
+/* Styles for the demo index page used with AccountSwitcher component */
+
+.appRoot {
+  /* define the bottombar height here, used by AccountSwitcher via CSS var */
+  --bottombar-height: 72px;
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f7fafb, #eef4f6);
+  color: var(--text, #03121a);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+}
+
+.main {
+  margin-left: 260px; /* leave space for the sidebar (width + left margin) */
+  padding: 28px;
+  padding-bottom: calc(var(--bottombar-height,72px) + 16px); /* avoid content under bottom bar */
+}
+
+/* simple grid of cards demonstrating account content */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.card {
+  background: white;
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 6px 18px rgba(9,30,66,0.04);
+  border: 1px solid rgba(3,10,18,0.04);
+}
+
+.muted {
+  color: #667985;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.primaryBtn, .secondaryBtn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+.primaryBtn {
+  background: linear-gradient(180deg,#0a84ff,#0066d6);
+  color: white;
+}
+.secondaryBtn {
+  background: #eef4f6;
+  color: #153241;
+}
+
+/* bottom bar mock */
+.bottomBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--bottombar-height, 72px);
+  background: linear-gradient(180deg, #ffffff, #f4f6f8);
+  border-top: 1px solid rgba(3,10,18,0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+.bottomBarInner {
+  font-size: 14px;
+  color: #2b4752;
+}
+
+/* responsive: reduce left margin on narrow screens */
+@media (max-width: 900px) {
+  .main {
+    margin-left: 20px;
+  }
+}

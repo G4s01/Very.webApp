@@ -15,7 +15,7 @@ class MyDocument extends Document {
           <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
           <link rel="manifest" href="/site.webmanifest" />
 
-          {/* Android / Chrome */}
+          {/* Android / Chrome explicit icons */}
           <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png" />
           <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
 
@@ -26,7 +26,7 @@ class MyDocument extends Document {
           {/* Theme color */}
           <meta name="theme-color" content="#0a5d36" />
 
-          {/* Safari pinned tab (optional; file not created automatically from PNG) */}
+          {/* Safari pinned tab (optional). Use an SVG that works as a mask. */}
           <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#0a5d36" />
         </Head>
         <body>

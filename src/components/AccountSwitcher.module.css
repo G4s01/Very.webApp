@@ -1,0 +1,248 @@
+/* Compact AccountSwitcher with group card containing the tiles.
+   Adjusted widths to avoid horizontal overflow and keep palette button visible.
+   Outer card shows that all tiles are part of one group.
+*/
+
+.wrapper {
+  position: fixed;
+  left: 12px;
+  top: 12px;
+  bottom: var(--bottombar-height, 72px);
+  width: 116px;      /* increased so buttons + palette btn fit without overflow */
+  min-width: 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 60; /* above many things; portal rendered into body */
+  pointer-events: auto;
+  user-select: none;
+}
+
+/* card container */
+.card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px 8px; /* slightly wider vertical padding */
+  border: 1px solid rgba(3,10,18,0.04);
+  box-shadow: 0 8px 24px rgba(9,30,66,0.03);
+  width: 96px;       /* inner width accommodating item width + paletteBtn */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative; /* for ::before accent */
+  transition: border-color 240ms ease, box-shadow 240ms ease;
+  overflow: visible;  /* allow palette button to overflow visually without creating scroll inside card */
+}
+
+/* top accent when card has an active custom color */
+.card.hasAccent::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: -6px;
+  height: 6px;
+  border-radius: 6px;
+  background: var(--card-accent, transparent);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+  transition: background 240ms ease, opacity 240ms ease;
+  opacity: 1;
+}
+
+/* wrapper for each item so we can position the palette button relative to it */
+.itemWrap {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* list container */
+.listWrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 6px 4px;
+  max-height: calc(100vh - 32px - var(--bottombar-height, 72px));
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  align-items: center;
+  /* prevent horizontal scrolling inside: */
+  overflow-x: hidden;
+}
+
+/* outer tactile button */
+.accountBtn {
+  background: #fff;
+  border: 1px solid rgba(3,10,18,0.04);
+  width: 64px;   /* slightly larger to give breathing room */
+  height: 64px;
+  padding: 6px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease;
+  outline: none;
+  box-shadow: 0 6px 18px rgba(9,30,66,0.03);
+  /* ensure the button itself cannot create horizontal overflow */
+  min-width: 0;
+}
+
+/* highlight for items with persisted custom color (subtle) */
+.accountBtn.hasCustom {
+  border-color: rgba(0,0,0,0.06);
+  box-shadow: 0 8px 22px rgba(9,30,66,0.04);
+}
+
+/* hover / focus */
+.accountBtn:hover,
+.accountBtn:focus {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 26px rgba(9,30,66,0.06);
+}
+
+/* selected state */
+.selected {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 12px 30px rgba(9,30,66,0.08);
+  border-color: rgba(3,10,18,0.06);
+}
+
+/* inner tile - smaller rounded square centered with initials */
+.tile {
+  width: 52px;   /* inner square slightly larger for bigger initials */
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg,#eef3f6,#e8eef2);
+  color: #0b2430;
+  font-weight: 800;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  overflow: hidden;
+  transition: box-shadow 240ms ease, transform 160ms ease, background 240ms ease;
+}
+
+/* flash animation when color changes */
+.flash {
+  animation: accountFlash 420ms ease-out;
+}
+@keyframes accountFlash {
+  0% { transform: scale(1.04); box-shadow: 0 14px 26px rgba(10,30,50,0.14); }
+  60% { transform: scale(0.995); box-shadow: 0 6px 12px rgba(10,30,50,0.08); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+
+/* image fills tile if present */
+.tile img { width:100%; height:100%; object-fit:cover; display:block; }
+
+/* initials: larger for better readability */
+.initials { font-size: 20px; letter-spacing: 0.6px; line-height: 1; }
+
+/* palette button: small circular icon positioned at top-right of the item */
+/* adjusted so it sits comfortably inside the card width */
+.paletteBtn {
+  position: absolute;
+  right: 8px;
+  top: -8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid rgba(3,10,18,0.06);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(9,30,66,0.06);
+  padding: 2px;
+  transition: transform 120ms ease;
+}
+.paletteBtn:hover { transform: translateY(-2px); }
+
+/* palette popover menu: rendered into body, positioned fixed.
+   The left/top are set inline from TSX so this CSS controls size/appearance only.
+*/
+.paletteMenu {
+  width: 176px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid rgba(3,10,18,0.06);
+  box-shadow: 0 12px 30px rgba(9,30,66,0.12);
+  padding: 8px;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* grid of swatches */
+.paletteGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+/* single swatch */
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.06);
+  cursor: pointer;
+  transition: transform 90ms ease, box-shadow 90ms ease;
+}
+.swatch:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(9,30,66,0.08); }
+
+/* selected swatch */
+.swatchSelected {
+  outline: 3px solid rgba(10,132,255,0.18);
+  box-shadow: 0 6px 18px rgba(9,30,66,0.08);
+}
+
+/* actions row inside popover */
+.paletteActions {
+  display:flex;
+  gap:8px;
+  justify-content: space-between;
+  align-items: center;
+}
+.clearBtn, .closeBtn {
+  background: transparent;
+  border: none;
+  color: #22333b;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.clearBtn:hover, .closeBtn:hover { background: rgba(3,10,18,0.03); }
+
+/* bottom hint */
+.bottomHint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 36px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 160ms ease;
+  background: linear-gradient(180deg, rgba(255,255,255,0), rgba(0,0,0,0.06));
+}
+.bottomHint.visible { opacity: 1; }
+
+/* responsive: hide sidebar on small screens */
+@media (max-width: 900px) {
+  .wrapper { display: none; }
+}

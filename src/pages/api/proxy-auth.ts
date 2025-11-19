@@ -19,12 +19,34 @@ function normalizePath(p?: string) {
 }
 
 /**
+ * Small structured logger used only for debugging.
+ * Does not change functionality; prints minimal token previews only.
+ */
+function slog(event: string, meta: Record<string, any> = {}) {
+  try {
+    const base = {
+      event,
+      ts: new Date().toISOString(),
+    };
+    // Avoid logging full tokens; allow callers to pass tokenPreview explicitly.
+    // Merge and print as single object for easier parsing in logs.
+    // eslint-disable-next-line no-console
+    console.debug('[proxy-auth][slog]', { ...base, ...meta });
+  } catch {
+    // ignore logging errors
+  }
+}
+
+/**
  * Proxy to upstream API with basic token handling.
  *
  * Improvements:
  *  - if upstream returns 401 with token expired, attempt a server-side refresh
  *    using UPSTREAM_AUTH_REFRESH (if configured). If refresh succeeds, retry
  *    the original request using merged cookies returned by the refresh call.
+ *
+ * Structured logging added (non-functional):
+ *  - events: upstream-call, missing-token, refresh-called, merged-cookie, set-challenge, clear-token
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const method = (req.method || 'GET').toUpperCase();
@@ -41,7 +63,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const prevGw = getCookie(req, 'gw_cookie');
     const cookie = prevGw ? decodeURIComponent(prevGw) : undefined;
     const bearer = getCookie(req, 'w3_token');
-    if (!bearer) return res.status(401).json({ error: 'Missing w3_token. Do OTP verify first.' });
+
+    // Structured log: upstream call intent
+    slog('upstream-call-intent', {
+      upstreamPath: path,
+      deviceId,
+      cookiePreview: cookie ? `${String(cookie).slice(0, 120)}` : undefined,
+      tokenPreview: bearer ? `${String(bearer).slice(0, 8)}...` : undefined,
+    });
+
+    if (!bearer) {
+      slog('missing-token', { reason: 'no w3_token cookie present', path });
+      return res.status(401).json({ error: 'Missing w3_token. Do OTP verify first.' });
+    }
 
     const challenge = getChallengeToken(req);
     const url = `${API_BASE.replace(/\/+$/, '')}/${normalizePath(path)}`;
@@ -60,6 +94,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // First attempt to call upstream
+    slog('upstream-call', {
+      url,
+      method,
+      headersPreview: Object.keys(headers),
+      tokenPreview: `${String(bearer).slice(0, 8)}...`,
+    });
+
     let upstream = await fetch(url, init);
     let out = await readJsonSafe(upstream as any);
 
@@ -72,6 +113,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // Attempt server-side refresh if configured
         const refreshUrl = process.env.UPSTREAM_AUTH_REFRESH;
         if (refreshUrl) {
+          slog('refresh-called', {
+            refreshUrl,
+            reason: 'token_expired',
+            tokenPreview: `${String(bearer).slice(0, 8)}...`,
+          });
           try {
             const refreshHeaders: Record<string, string> = {};
             // forward the current gw_cookie/raw cookie string to upstream refresh
@@ -95,6 +141,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   path: '/', httpOnly: true, sameSite: 'Lax',
                   secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24,
                 });
+                slog('merged-cookie', {
+                  preview: `${mergedAfterRefresh.slice(0, 120)}`,
+                });
               }
 
               // Prepare headers for retry: use merged cookies as the cookie header
@@ -107,6 +156,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               }
 
               // Retry the original request with refreshed cookies
+              slog('retry-request', {
+                url,
+                tokenPreview: undefined,
+                cookiePreview: retryCookieHeader ? `${String(retryCookieHeader).slice(0, 120)}` : undefined,
+              });
               upstream = await fetch(url, retryInit);
               out = await readJsonSafe(upstream as any);
 
@@ -116,12 +170,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               } else {
                 // retry still unauthorized -> clear token and respond accordingly
                 clearCookie(res, 'w3_token');
+                slog('clear-token', { reason: 'retry-unauthorized' });
                 res.setHeader('Cache-Control', 'no-store');
                 return res.status(401).json(out.json ?? { raw: out.text });
               }
             } else {
               // refresh failed -> clear token and notify client
               clearCookie(res, 'w3_token');
+              slog('clear-token', { reason: 'refresh-failed' });
               res.setHeader('Cache-Control', 'no-store');
               const failMsg = refreshOut?.json?.message || refreshOut?.text || 'Refresh failed';
               return res.status(401).json({ error: 'TOKEN_EXPIRED', message: failMsg });
@@ -129,12 +185,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           } catch (refreshErr: any) {
             console.error('[proxy-auth] refresh error', refreshErr);
             clearCookie(res, 'w3_token');
+            slog('clear-token', { reason: 'refresh-exception', err: String(refreshErr?.message ?? refreshErr) });
             res.setHeader('Cache-Control', 'no-store');
             return res.status(401).json({ error: 'TOKEN_EXPIRED', message: 'Refresh attempt failed' });
           }
         } else {
           // No refresh endpoint configured: clear token and return TOKEN_EXPIRED
           clearCookie(res, 'w3_token');
+          slog('clear-token', { reason: 'no-refresh-config' });
           res.setHeader('Cache-Control', 'no-store');
           return res.status(401).json({ error: 'TOKEN_EXPIRED', message: msg });
         }
@@ -152,6 +210,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         path: '/', httpOnly: true, sameSite: 'Lax',
         secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60,
       });
+      slog('set-challenge', { preview: `${String(ch).slice(0, 24)}...` });
     }
 
     // Merge set-cookie values from upstream into gw_cookie (existing behaviour)
@@ -161,10 +220,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         path: '/', httpOnly: true, sameSite: 'Lax',
         secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24,
       });
+      // Already logged merged cookie in refresh branch; log also here for completeness
+      slog('merged-cookie', { preview: `${merged.slice(0, 120)}` });
     }
 
     return res.status(upstream.status).json(out.json ?? { raw: out.text });
   } catch (e: any) {
+    console.error('[proxy-auth] unexpected error', e);
+    slog('internal-error', { err: String(e?.message ?? e) });
     return res.status(500).json({ error: e.message || String(e) });
   }
 }
