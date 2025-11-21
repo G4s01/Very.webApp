@@ -4,8 +4,8 @@ import styles from './AccountSwitcher.module.css';
 
 export type Account = {
   id: string;
-  name?: string; // full name used only for aria-label and initials extraction
-  avatarBg?: string; // optional background color for initials tile (prefers explicit)
+  name?: string;
+  avatarBg?: string;
   avatarUrl?: string;
 };
 
@@ -17,11 +17,10 @@ export type AccountSwitcherProps = {
   className?: string;
 };
 
-/** localStorage key used to persist per-account colors */
 const STORAGE_KEY = 'account_switcher_colors_v1';
 
-/** Default palette shown in the picker (high contrast, varied hues) */
-const DEFAULT_PALETTE = Array.from(new Set([
+// built-in fallback palette (used until/if dynamic import succeeds)
+const BUILTIN_PALETTE = [
   '#FDE68A', // amber
   '#FCA5A5', // red/pink
   '#FBCFE8', // pink
@@ -33,9 +32,9 @@ const DEFAULT_PALETTE = Array.from(new Set([
   '#FEE2B3', // apricot
   '#E6E6FA', // lavender
   '#FFD6E0', // soft rose
-]));
+  '#FFE4B5', // light peach
+];
 
-/** Deterministic pastel-ish color from string (fallback when no explicit color) */
 function colorFromId(id: string) {
   let h = 0;
   for (let i = 0; i < id.length; i++) {
@@ -43,28 +42,24 @@ function colorFromId(id: string) {
     h |= 0;
   }
   const hue = Math.abs(h) % 360;
-  const sat = 58 + (Math.abs(h) % 12); // 58-69
-  const light = 84 - (Math.abs(h) % 8); // 84-77
+  const sat = 58 + (Math.abs(h) % 12);
+  const light = 84 - (Math.abs(h) % 8);
   return `hsl(${hue} ${sat}% ${light}%)`;
 }
 
-/** Return two-letter initials: first + last name (or first two letters if single word) */
 function initialsOf(name?: string) {
   if (!name) return '';
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase();
-  }
-  const first = parts[0][0] ?? '';
-  const last = parts[parts.length - 1][0] ?? '';
-  return `${first}${last}`.toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
 type PickerState = {
   accountId: string;
   left: number;
   top: number;
-  openAbove: boolean;
+  width: number;
+  height: number;
 } | null;
 
 export default function AccountSwitcher({
@@ -78,16 +73,39 @@ export default function AccountSwitcher({
   const paletteRef = useRef<HTMLDivElement | null>(null);
   const [showBottomHint, setShowBottomHint] = useState(false);
 
-  // map accountId -> color string persisted in localStorage
   const [colorsMap, setColorsMap] = useState<Record<string, string>>({});
-  // which account currently has the color picker open (portal-based)
   const [picker, setPicker] = useState<PickerState>(null);
-  // flash state per account for animation
   const [flashMap, setFlashMap] = useState<Record<string, boolean>>({});
-  // accent color shown on the card (derived from active account color if any)
   const [cardAccent, setCardAccent] = useState<string | null>(null);
 
-  // load persisted colors once
+  // palette state (can be dynamically imported from JSON)
+  const [palette, setPalette] = useState<string[]>(BUILTIN_PALETTE);
+
+  // Palette layout constants
+  const SWATCH = 16; // px
+  const COLS = 3;
+  const ROWS = 4;
+  const GAP = 10; // px between swatches
+  const PAD_LR = 10;
+  const PAD_TOP = 16;
+  const PAD_BOTTOM = 16;
+
+  useEffect(() => {
+    // Try to dynamically import palette file (client-side). If fails, keep BUILTIN_PALETTE.
+    (async () => {
+      try {
+        // path: src/data/palette.json (example provided below)
+        const mod = await import('../data/palette.json');
+        const arr = (mod && (mod.default ?? mod)) as unknown;
+        if (Array.isArray(arr) && arr.length) {
+          setPalette(arr as string[]);
+        }
+      } catch {
+        // ignore – use fallback
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -95,30 +113,20 @@ export default function AccountSwitcher({
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') setColorsMap(parsed);
       }
-    } catch {
-      // ignore parse errors
-    }
+    } catch {}
   }, []);
 
-  // persist when colorsMap changes
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(colorsMap));
-    } catch {
-      // ignore
-    }
+    } catch {}
   }, [colorsMap]);
 
-  // update card accent when activeId or colorsMap changes
   useEffect(() => {
-    if (activeId && colorsMap[activeId]) {
-      setCardAccent(colorsMap[activeId]);
-    } else {
-      setCardAccent(null);
-    }
+    if (activeId && colorsMap[activeId]) setCardAccent(colorsMap[activeId]);
+    else setCardAccent(null);
   }, [activeId, colorsMap]);
 
-  // compute bottom hint (scrollable)
   useEffect(() => {
     function updateHint() {
       const el = containerRef.current;
@@ -145,16 +153,13 @@ export default function AccountSwitcher({
     };
   }, [accounts]);
 
-  // click outside to close palette (works with portal)
+  // close palette when clicking outside (works with portal)
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!picker) return;
-      const target = e.target as Node | null;
       const menuEl = paletteRef.current;
-      // if click inside the palette, keep open
+      const target = e.target as Node | null;
       if (menuEl && menuEl.contains(target)) return;
-      // if click on a palette button (which is outside the portal) we don't want to prematurely close,
-      // but palette button click toggles picker before this handler runs (onClick). For safety: close.
       setPicker(null);
     }
     if (picker) {
@@ -168,37 +173,48 @@ export default function AccountSwitcher({
     if (onSelect) onSelect(id);
   }
 
+  function computePaletteSize() {
+    const widthPx = PAD_LR * 2 + COLS * SWATCH + (COLS - 1) * GAP;
+    const heightPx = PAD_TOP + ROWS * SWATCH + (ROWS - 1) * GAP + PAD_BOTTOM;
+    return { width: Math.round(widthPx), height: Math.round(heightPx) };
+  }
+
   function openPickerFor(accountId: string, anchorEl: HTMLElement | null) {
     if (!anchorEl) {
       setPicker(null);
       return;
     }
     const rect = anchorEl.getBoundingClientRect();
-    const paletteWidth = 176; // matches CSS
-    const paletteHeight = 120; // approximate: grid + actions
-    // desired centered horizontally under tile
-    let left = rect.left + rect.width / 2 - paletteWidth / 2;
-    // preferred below the tile
-    let top = rect.bottom + 8;
-    let openAbove = false;
-    // clamp horizontally
+    const { width: paletteWidth, height: paletteHeight } = computePaletteSize();
+    const gap = 8;
+
+    const btn = anchorEl.querySelector(`.${styles.paletteBtn}`) as HTMLElement | null;
+    let referenceTop = rect.top;
+    if (btn) {
+      const bRect = btn.getBoundingClientRect();
+      referenceTop = bRect.top;
+    }
+
+    const TOP_NUDGE = 4;
+    let top = referenceTop + TOP_NUDGE;
+
+    let left = rect.right + gap;
+    if (left + paletteWidth > window.innerWidth - gap) {
+      left = rect.left - gap - paletteWidth;
+    }
+
     const pad = 8;
     if (left < pad) left = pad;
-    if (left + paletteWidth > window.innerWidth - pad) left = window.innerWidth - pad - paletteWidth;
-    // if not enough space below, open above
-    if (rect.bottom + 8 + paletteHeight > window.innerHeight) {
-      // open above
-      openAbove = true;
-      top = rect.top - 8 - paletteHeight;
-      // if still outside top, clamp to pad
-      if (top < pad) top = pad;
+    if (top < pad) top = pad;
+    if (top + paletteHeight > window.innerHeight - pad) {
+      top = Math.max(pad, window.innerHeight - pad - paletteHeight);
     }
-    setPicker({ accountId, left, top, openAbove });
+
+    setPicker({ accountId, left: Math.round(left), top: Math.round(top), width: paletteWidth, height: paletteHeight });
   }
 
   function handleOpenClick(e: React.MouseEvent, accountId: string) {
     e.stopPropagation();
-    // get the outer itemWrap element as anchor
     const el = (e.currentTarget as HTMLElement).closest(`.${styles.itemWrap}`) as HTMLElement | null;
     if (picker && picker.accountId === accountId) {
       setPicker(null);
@@ -208,10 +224,9 @@ export default function AccountSwitcher({
   }
 
   function handlePickColor(accountId: string, color: string) {
-    // set color and trigger flash animation for that account
     setColorsMap(prev => ({ ...prev, [accountId]: color }));
     setFlashMap(prev => ({ ...prev, [accountId]: true }));
-    // clear flash after short time
+    setCardAccent(color);
     window.setTimeout(() => {
       setFlashMap(prev => {
         const copy = { ...prev };
@@ -219,8 +234,6 @@ export default function AccountSwitcher({
         return copy;
       });
     }, 420);
-    // set card accent to this color (immediate visual)
-    setCardAccent(color);
     setPicker(null);
   }
 
@@ -230,7 +243,6 @@ export default function AccountSwitcher({
       delete copy[accountId];
       return copy;
     });
-    // small flash as feedback
     setFlashMap(prev => ({ ...prev, [accountId]: true }));
     window.setTimeout(() => {
       setFlashMap(prev => {
@@ -239,7 +251,6 @@ export default function AccountSwitcher({
         return copy;
       });
     }, 420);
-    // if the cleared account was active, remove card accent
     if (accountId === activeId) setCardAccent(null);
     setPicker(null);
   }
@@ -250,17 +261,32 @@ export default function AccountSwitcher({
     styleVars.minWidth = `${width}px`;
   }
 
-  // Portal content for palette (rendered outside and absolutely positioned)
   const palettePortal = picker ? ReactDOM.createPortal(
     <div
       ref={paletteRef}
       className={styles.paletteMenu}
       role="dialog"
       aria-label="Scegli colore"
-      style={{ left: picker.left, top: picker.top, position: 'fixed' }}
+      style={{
+        left: picker.left,
+        top: picker.top,
+        position: 'fixed',
+        width: `${picker.width}px`,
+        height: `${picker.height}px`
+      }}
     >
+      <button
+        type="button"
+        className={styles.closeX}
+        aria-label="Chiudi"
+        onClick={(ev) => { ev.stopPropagation(); setPicker(null); }}
+        title="Chiudi"
+      >
+        ×
+      </button>
+
       <div className={styles.paletteGrid}>
-        {DEFAULT_PALETTE.map((col, idx) => {
+        {palette.map((col, idx) => {
           const isSelected = (colorsMap[picker.accountId] ?? '') === col;
           return (
             <button
@@ -274,24 +300,17 @@ export default function AccountSwitcher({
           );
         })}
       </div>
-      <div className={styles.paletteActions}>
-        <button
-          className={styles.clearBtn}
-          onClick={(e) => { e.stopPropagation(); handleClearColor(picker!.accountId); }}
-          type="button"
-        >
-          Ripristina
-        </button>
-        <button
-          className={styles.closeBtn}
-          onClick={(e) => { e.stopPropagation(); setPicker(null); }}
-          type="button"
-        >
-          Chiudi
-        </button>
-      </div>
+
+      <button
+        className={styles.resetIcon}
+        onClick={(e) => { e.stopPropagation(); handleClearColor(picker.accountId); }}
+        aria-label="Ripristina colore predefinito"
+        title="Ripristina"
+        type="button"
+      >
+        ↺
+      </button>
     </div>,
-    // render into body so it's outside any clipping/overflow
     typeof document !== 'undefined' ? document.body : document.createElement('div')
   ) : null;
 
@@ -302,7 +321,6 @@ export default function AccountSwitcher({
         style={styleVars}
         aria-label="Account Switcher"
       >
-        {/* Group card containing all account tiles */}
         <div
           className={`${styles.card} ${cardAccent ? styles.hasAccent : ''}`}
           role="group"
@@ -343,7 +361,6 @@ export default function AccountSwitcher({
                       </span>
                     </button>
 
-                    {/* palette button (small) top-right of the outer button */}
                     <button
                       aria-label={`Cambia colore account ${acc.name ?? acc.id}`}
                       className={styles.paletteBtn}
@@ -351,7 +368,6 @@ export default function AccountSwitcher({
                       title="Cambia colore"
                       type="button"
                     >
-                      {/* simple palette SVG icon */}
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden focusable="false">
                         <path d="M12 3C7.03 3 3 7.03 3 12a7 7 0 0012 4.9A1.5 1.5 0 0018.5 16c0-2.48 2.02-4.5 4.5-4.5S27.5 13.52 27.5 16 25.48 20.5 23 20.5h-1.5" transform="scale(.8)" stroke="#22333b" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
                         <circle cx="6" cy="6" r="1.4" transform="scale(.9) translate(2,2)" fill="#22333b"/>
