@@ -2,21 +2,30 @@
    Palette is 3x4 (3 columns × 4 rows), swatches compact (16px).
 */
 
-.wrapper {
+/* accountSwitcherRoot is the fixed left rail wrapper used by TopBar/main to compute offset.
+   Root width matches the visual .card width (96px) and the .card is centered horizontally
+   inside the rail so there is no extra unused space to the right.
+*/
+.accountSwitcherRoot {
   position: fixed;
-  left: 12px;
+  left: 12px; /* gap from page left to AccountSwitcher start (reference gap) */
   top: 12px;
   bottom: var(--bottombar-height, 72px);
-  width: 116px;
-  min-width: 116px;
+  width: 96px;    /* same as .card width */
+  min-width: 96px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   z-index: 60;
   pointer-events: auto;
   user-select: none;
+  align-items: center; /* center the visual .card horizontally inside the rail */
 }
 
+/* legacy name kept for compatibility (mapping to root) */
+.wrapper { display: none; }
+
+/* card inside the rail (visual panel) */
 .card {
   background: #fff;
   border-radius: 14px;
@@ -193,7 +202,6 @@
   border-color: rgba(229,57,53,0.12);
 }
 
-/* grid 3x4 */
 .paletteGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -202,7 +210,6 @@
   margin: 0 auto;
 }
 
-/* swatch: compact (small) */
 .swatch {
   width: 16px;
   height: 16px;
@@ -218,7 +225,6 @@
   box-shadow: 0 6px 18px rgba(9,30,66,0.08);
 }
 
-/* reset icon bottom-right half outside */
 .resetIcon {
   position: absolute;
   right: -12px;
@@ -254,5 +260,5 @@
 .bottomHint.visible { opacity: 1; }
 
 @media (max-width: 900px) {
-  .wrapper { display: none; }
+  .accountSwitcherRoot { display: none; }
 }

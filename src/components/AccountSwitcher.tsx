@@ -21,18 +21,9 @@ const STORAGE_KEY = 'account_switcher_colors_v1';
 
 // built-in fallback palette (used until/if dynamic import succeeds)
 const BUILTIN_PALETTE = [
-  '#FDE68A', // amber
-  '#FCA5A5', // red/pink
-  '#FBCFE8', // pink
-  '#C7F9CC', // green
-  '#BFDBFE', // blue light
-  '#D8B4FE', // purple
-  '#FCD34D', // yellow
-  '#CFFAFE', // cyan
-  '#FEE2B3', // apricot
-  '#E6E6FA', // lavender
-  '#FFD6E0', // soft rose
-  '#FFE4B5', // light peach
+  '#99FFCC', '#C7F9CC', '#CFFAFE', '#FCA5A5',
+  '#FFD6E0', '#FF99CC', '#FCD34D', '#FDE68A',
+  '#FEE2B3', '#D8B4FE', '#E6E6FA', '#BFDBFE',
 ];
 
 function colorFromId(id: string) {
@@ -91,10 +82,8 @@ export default function AccountSwitcher({
   const PAD_BOTTOM = 16;
 
   useEffect(() => {
-    // Try to dynamically import palette file (client-side). If fails, keep BUILTIN_PALETTE.
     (async () => {
       try {
-        // path: src/data/palette.json (example provided below)
         const mod = await import('../data/palette.json');
         const arr = (mod && (mod.default ?? mod)) as unknown;
         if (Array.isArray(arr) && arr.length) {
@@ -317,7 +306,7 @@ export default function AccountSwitcher({
   return (
     <>
       <aside
-        className={`${styles.wrapper} ${className ?? ''}`}
+        className={`${styles.accountSwitcherRoot} ${className ?? ''}`}
         style={styleVars}
         aria-label="Account Switcher"
       >

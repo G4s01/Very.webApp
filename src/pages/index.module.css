@@ -9,8 +9,9 @@
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
 }
 
+/* main: left-margin aligned with AccountSwitcher: left offset (12px) + rail width (116px) = 128px */
 .main {
-  margin-left: 260px; /* leave space for the sidebar (width + left margin) */
+  margin-left: 128px; /* leave space for the sidebar (left offset + width) */
   padding: 28px;
   padding-bottom: calc(var(--bottombar-height,72px) + 16px); /* avoid content under bottom bar */
 }
